@@ -1,0 +1,4 @@
+(executable
+ (public_name xword)
+ (name main)
+ (libraries xword))

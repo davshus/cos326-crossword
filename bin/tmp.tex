@@ -1,0 +1,239 @@
+
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2026_conference,times}
+
+% Optional math commands from https://github.com/goodfeli/dlbook_notation.
+\input{math_commands.tex}
+
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage[most]{tcolorbox}
+% TODO
+\newcommand{\todo}[1]{\textcolor{red}{{[TODO:~}{#1}{]}}}
+
+\title{Crosswords in OCaml}
+
+% Authors must not appear in the submitted version. They should be hidden
+\iclrfinalcopy
+% as long as the \iclrfinalcopy macro remains commented out below.
+% Non-anonymous submissions will be rejected without review.
+
+\author{{David Shustin} \\
+Department of Computer Science, Princeton\\
+\texttt{dshustin@princeton.edu} \\
+}
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to \LaTeX{} to determine where to break
+% the lines. Using \AND forces a linebreak at that point. So, if \LaTeX{}
+% puts 3 of 4 authors names on the first line, and the last on the second
+% line, try using \AND instead of \And before the third author name.
+
+
+\newcommand{\fix}{\marginpar{FIX}}
+\newcommand{\new}{\marginpar{NEW}}
+
+%\iclrfinalcopy % Uncomment for camera-ready version, but NOT for submission.
+\begin{document}
+
+
+\maketitle
+
+% \todo{abstract?}
+% \todo{fill references}
+
+\section{Introduction}
+
+Word puzzle games such as Scrabble \cite{scrabble}, Connections \cite{connections}, and Wordle \cite{wordle} are a popular form of entertainment. Recent advances in computer communications have improved the accessibility of these puzzle games and introduced the ability for new gameplay paradigms. For example, while the New York Times (NYT) crossword was introduced as daily serialization, a lengthy archive of puzzles are now available to paying subscribers on the NYT website  \cite{nytcross}. The digitization of crossword puzzles have introduced the ability for crossword players to play together across great physical distance using online collaborative crossword software \cite{d4ac}. Moreover, while crosswords have long been the subject of individual first-to-finish competition  \cite{acpt}, developments in digital crossword software have enabled a directly competitive variant of crossword solving known as ``fencing" or ``cross-swording," \cite{fencing} during which two competitors race to complete a majority of a crossword played on a single board. 
+
+A crossword can be represented as a rectangular grid of cells. Each cell may either be white or black, and each cell has an associated correct fill. A player can make a move by filling a white square with a single letter. In fact, crosswords allow fills to be more than one letter or even pictures, but we only consider single-character fills in this work. The player wins the game if every white cell is filled with the correct solution. A crossword solution is considered ``valid" if every vertical or horizontal contiguous array of white cells forms a recognizable phrase when read top-to-bottom or left-to-right, respectively.
+
+However, a player might find a puzzle difficult and need some assistance. Many crossword apps include features that help the user, like verifying whether a cell is filled with the correct solution or revealing the correct solution entirely. The check and reveal operations can be applied to entire regions at once: typically, these operations may be applied to a single cell, or an entire word, or the entire board.
+
+%  TODO: explain numbering
+% \todo{describe what a crossword is?}
+\section{Interface}
+
+In this work, we implement a digital crossword puzzle. The game accepts a .puz file \cite{puzfile} as a command line argument describing a crossword and renders a crossword board and clues in the terminal.
+The user is immediately presented with a read-evaluate-print-loop (REPL) textual interface. This REPL is implemented as a recursive auxiliary function that waits for a line of user input. If the user enters anything besides ``quit," the auxiliary function calls itself and repeats the process. This provides a user-friendly way of terminating the program, though the program a
+
+\begin{tcolorbox}[
+  enhanced,
+  colback=gray!5,
+  colframe=black,
+  boxrule=0.8pt,
+  arc=2mm,
+  title={Pseudo-code for REPL interface},
+  left=4mm,
+  right=4mm,
+  top=2mm,
+  bottom=2mm
+]
+\begin{verbatim}
+let repl (xword : crossword) =
+  let handle_command (s : string) =
+    match parse_command s with ...
+  in
+  let rec loop () =
+    print_string "> ";
+    let input = read_line () in
+    match input with
+    | "quit" -> ()
+    | _ ->
+        handle_command input;
+        loop ()
+  in
+  loop ()
+\end{verbatim}
+\end{tcolorbox}
+
+The user may select from the following commands:
+\begin{itemize}
+    \item \texttt{guess [Y] [X] [C]}: place character \texttt{C} in row \texttt{Y} and column \texttt{X}.
+    \item \texttt{erase [Y] [X]}: replace the cell in row \texttt{Y} and column \texttt{X} with whitespace.
+    \item \texttt{check [cell [Y] [X] | word [N][d,a] | board]}: highlight cells that have been filled correctly. This command can check if a given cell is correctly filled, or if an entire word is correctly filled (specifying the \texttt{N}'th word and \texttt{d}/\texttt{a} for down/across), or if the entire board is correctly filled.
+    \item \texttt{reveal [cell [Y] [X] | word [N][d,a] | board]}: reveal the correct answers for this puzzle. This command can reveal a given cell, an entire word, or the entire board.
+\end{itemize}
+If the user enters something besides these commands or a malformatted command, the program warns the user and continues prompting for a valid command. Each command is represented as an enumerated data type faithful to the description above. Input parsing was accomplished by splitting the input strings with a space delimiter and using OCaml's pattern matching type system to extract valid commands. Finally, OCaml's exception handling system was used to account for invalid inputs, including non-numeric strings in fields expecting numbers and user-entered fills longer than a character.
+% Once the board is correctly completed, the program will congratulate the user and terminate.
+
+\begin{tcolorbox}[
+  enhanced,
+  colback=gray!5,
+  colframe=black,
+  boxrule=0.8pt,
+  arc=2mm,
+  title={Pseudo-code for command parsing},
+  left=4mm,
+  right=4mm,
+  top=2mm,
+  bottom=2mm
+]
+\begin{verbatim}
+type region =
+  | Cell of int * int
+  | Word of int * direction
+  | Board
+
+type command =
+  | Guess of int * int * char
+  | Erase of int * int
+  | Check of region
+  | Reveal of region
+
+let parse_region (args: string list) : region option =
+  match args with
+  | "cell" :: row_str :: col_str :: [] -> ...
+  | "word" :: n :: "a" :: [] -> ...
+  | "word" :: n :: "d" :: [] -> ...
+  | "board" :: [] -> ...
+  | _ -> None
+
+let parse_command (s: string) : command option =
+  let cmd = String.split_on_char ' ' s in
+  try
+    match cmd with
+    | "guess" :: row_str :: col_str :: guess :: [] -> ...
+    | "erase" :: row_str :: col_str :: [] -> ...
+    | "check" :: args -> ...
+    | "reveal" :: args -> ...
+    | _ -> None
+  with
+    | Failure _ -> None (* handle int_of_string *)
+    | Invalid_argument _ -> None (* handle String.get *)
+\end{verbatim}
+\end{tcolorbox}
+
+\section{Implementation}
+The crossword program was implemented using OCaml, a functional programming language. The crossword itself is implemented as a 1D array. We first started by implementing this as a 2D array, but later found that converting rows/columns to array indices was more convenient than indexing an array of arrays. Specifically, we use the equation
+\[i = r * N + c\]
+where $i$ is the index of a cell in the array, $r$ and $c$ are the row and column number respectively, and $N$ is the number of columns. We can perform the inverse operation with the following equations:
+\[r = i / N\]
+\[c = i \mod N\]
+
+Each cell is represented using an optional OCaml \textit{record}, which is an unordered collection of data with named fields. If a cell is \texttt{None}, the cell represents a black cell. If the cell is \texttt{Some}thing, it represents a white cell which might contain the user's guess and is associated with a solution. Each cell contains the correct fill for that cell, the user-supplied contents, the identifier of the cell, and whether the cell has been checked. The crossword is also implemented as a record containing some metadata (e.g. number of rows, number of columns) and the data of the puzzle (e.g. clues and grid).
+
+
+
+\begin{tcolorbox}[
+  enhanced,
+  colback=gray!5,
+  colframe=black,
+  boxrule=0.8pt,
+  arc=2mm,
+  title={Crossword Types},
+  left=4mm,
+  right=4mm,
+  top=2mm,
+  bottom=2mm
+]
+\begin{verbatim}
+type cell = {
+  solution: string;
+  contents: string option;
+  number: int option;
+  verified: bool;
+}
+type crossword = {
+  n_rows: int;
+  n_cols: int;
+  clues: clue_set;
+  (* None cells are black cells.
+     Some cells are white cells with a clue. *)
+  grid: cell_grid;
+}
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{Operations}
+Guessing a crossword cell involves replacing a cell's contents with some character supplied by the user. In our implementation, this is done by editing the crossword \textit{grid} array in-place and replacing the cell at a given index with a cell with some data edited. To this end, we include a \texttt{Crossword.set\_cell} function that accepts a row, column, and cell representation, and replaces the cell at that index with the cell argument. We include an analogous \textit{Crossword.get\_cell} function that accepts a row and column and returns the cell at that index. By combining these getter and setter functions, we can easily edit the contents of each cell by first getting a cell and then setting a modified record.
+
+
+
+\subsection{Board-wide operations}
+Many operations on the board require the same function to be called on every cell in the board. Revealing a word, checking the entire board, and setting the numbers for each cell correctly can all be implemented by a single function called on the correct cells. We simplified these operations into a single function that can be applied to multiple cells. However, operations like numbering a board require carrying state between calls to \texttt{set\_cell} (i.e. counting how many cells have already been numbered). We implement a function that combines features of reduction (\texttt{List.fold\_left}) and mapping (\texttt{List.map}). Specifically, these functions iteratively call a given function on a sequence of cells in left-to-right, top-to-down order. Each call edits the grid array in-place and replaces the a cell with the output of a function. Each call of the function also returns a carried variable, which is passed to the next iteration of the function. The signature of these functions is
+
+\texttt{crossword -> 'acc -> ('acc -> crossword -> int -> int -> cell option -> (cell option * 'acc)) -> 'acc}
+
+We implemented two such functions with the ``fold-map-inplace" type of function above. The first uses the OCaml built-in \texttt{Array.fold\_left} function to fold a function over the entire board. The second, which folds a function over a single word, uses a recursive auxiliary function to iteratively increment the column or row until a black square is reached, or the iteration exceeds the limits of the board.
+
+We implement the commands \texttt{reveal} and \texttt{check}, as well as the cell numbering, using this helper function. Neither of the former commands require a carry, so this helper function effectively functions as an in-place map with accurate bound checking. However, the \texttt{Crossword.set\_numbers} function uses the carried variable to count the amount of cells that have already been numbered.
+
+\subsection{}
+
+
+% The first step will be to develop a .puz file parser. The parser will build a representation of the crossword board, the correct answers, and the associated clues. The next step will be to write a renderer for the state of the crossword board including a sidebar for the clues. 
+ % two-dimensional doubly-linked list using an inductive type to represent each cell. Checking whether the board is complete will require implementing a fold-like function for the board type. Similarly, rendering the board will require implementing a map-like function for the board type.
+
+% \begin{minipage}{\textwidth}
+% \section{Extensions}
+% There are several interesting extensions that we can implement to complete this project. For example,
+% \begin{itemize}
+%     \item the \texttt{check} and \texttt{reveal} commands described above.
+%     \item A puzzle editor, which might include the following features:
+%     \begin{itemize}
+%         \item \texttt{rewrite}, which overwrites a clue text.
+%         \item \texttt{black}, which toggles whether a crossword square is fillable.
+%     \end{itemize}
+%     \item An automated puzzle filler, which uses a dictionary file to build a crossword from legal words. A greedy brute force algorithm should be capable of filling a small board. Memoization and lazy-evaluation techniques might enable larger boards to be filled.
+    
+% \end{itemize}
+% \end{minipage}
+\section{Acknowledgements}
+We thank Professor David Walker and Theresa Lim for contributing thoughtful discussion and helpful advice.
+
+LLMs were partially used during the programming in this assignment. Specifically, we used Cursor to create an initial implementation of the .puz file format reader using the \texttt{cstruct} library. The prompt used was:
+
+\texttt{install cstruct, write a file reader using the information from @xword/puzfileformat.txt in @xword/lib/puzzle.ml}
+
+This implementation was modified to convert from the LLM's chosen data structure representation of the crossword to our own. We also used StackOverflow, ChatGPT, and the OCaml documentation to learn about OCaml features that were helpful for this assignment but were not covered in the course. Some examples include the \texttt{Array} library, records, and the \texttt{cstruct} library.
+
+
+
+\bibliography{references}
+\bibliographystyle{acm}
+
+
+\end{document}
